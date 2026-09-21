@@ -458,7 +458,7 @@ The notebook installs the required open-source packages and downloads the requir
 
 Clone the repository and open:
 
-`workforce_demand_forecasting_capstone.ipynb`
+`Workforce_Demand_Forecasting.ipynb`
 
 in a Jupyter-compatible environment.
 
