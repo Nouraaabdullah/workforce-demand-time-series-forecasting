@@ -11,7 +11,7 @@ The goal is to forecast the number of employees required each day while evaluati
 The project was completed as part of the **SDAIA Academy — Time Series Forecasting AI Systems** training programme.
 
 **Trainee:** Norah Almadhi
-**Cohort:** [20/9/2026 – 22/9/2026]
+**Cohort:** 20/9/2026 – 22/9/2026
 
 ---
 
