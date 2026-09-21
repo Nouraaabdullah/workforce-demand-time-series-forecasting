@@ -6,11 +6,11 @@
 
 This project develops an end-to-end time-series forecasting workflow for daily workforce demand.
 
-The goal is to forecast the number of employees required each day while evaluating how different forecasting approaches behave when the underlying demand regime changes.
+The objective is to forecast required workforce headcount while evaluating how classical, machine-learning, and probabilistic forecasting approaches behave under strong weekly seasonality and an abrupt structural regime change.
 
 The project was completed as part of the **SDAIA Academy — Time Series Forecasting AI Systems** training programme.
 
-**Trainee:** Norah Almadhi
+**Trainee:** Norah Almadhi  
 **Cohort:** 20/9/2026 – 22/9/2026
 
 ---
@@ -25,237 +25,421 @@ from the course repository:
 
 https://github.com/MohammadYusif/time-series-forecasting-ai-systems
 
-The dataset contains one daily time series:
+The dataset contains one synthetic daily workforce-demand series:
 
 - **Date range:** 2024-01-01 to 2025-12-31
 - **Observations:** 731 daily records
 - **Target:** `required_headcount`
 - **Frequency:** Daily
-- **Primary seasonality:** Weekly
+- **Dominant seasonality:** Weekly
 - **Documented structural break:** 2025-04-01
 
-The dataset is synthetic and was generated for educational use by the course. It should not be interpreted as data from a real employer or contact centre.
+The dataset was generated specifically for the course and does not represent a real employer or contact centre.
 
 ### Why this dataset?
 
-I selected the workforce-demand series because its structural break creates a useful forecasting problem beyond ordinary train/test evaluation.
+I selected the workforce-demand dataset because its structural break creates a forecasting problem where validation design matters as much as model choice.
 
-A model can perform well after the new regime has been established while still failing badly at the point where the shift first occurs.
+A model may perform well once the post-break regime is established while still failing substantially when the shift first occurs.
 
-This makes the dataset particularly suitable for demonstrating why walk-forward backtesting and fold-level diagnostics matter.
+This makes the series particularly useful for demonstrating:
 
----
-
-## Project Objectives
-
-The notebook implements all seven capstone requirements:
-
-1. **Time-series diagnostics**
-   - STL decomposition
-   - ACF and PACF
-   - Augmented Dickey-Fuller stationarity test
-   - first-order differencing
-
-2. **Classical forecasting**
-   - Holt-Winters exponential smoothing
-   - weekly seasonality
-   - seasonal-naive baseline
-   - Ljung-Box residual diagnostic
-
-3. **Machine-learning forecasting**
-   - LightGBM
-   - lag features
-   - rolling statistics
-   - calendar features
-   - leakage-safe recursive multi-step forecasting
-
-4. **Walk-forward validation**
-   - 40 expanding-window folds
-   - 10-day forecast horizon
-   - structural-break fold analysis
-
-5. **Forecast evaluation**
-   - MAE
-   - RMSE
-   - WAPE
-   - MASE
-
-6. **Probabilistic forecasting**
-   - LightGBM quantile regression
-   - 80% prediction interval
-   - empirical coverage
-   - interval width
-   - pinball loss
-
-7. **Model comparison and recommendation**
-   - predictive accuracy
-   - history requirements
-   - interpretability
-   - interval support
-   - computational complexity
-   - structural-break behavior
+- time-series diagnostics,
+- classical and machine-learning forecasting,
+- leakage-safe feature engineering,
+- expanding and rolling walk-forward validation,
+- probabilistic forecasting,
+- and model-family selection under regime change.
 
 ---
 
-## Forecasting Approaches
+## Project Scope
 
-### Holt-Winters Exponential Smoothing
+The notebook implements the full capstone workflow.
 
-The classical model uses:
+### 1. Time-Series Structure and Diagnostics
 
-- additive trend
-- additive weekly seasonality
-- seasonal period of 7 days
+The diagnostic analysis includes:
 
-The model provides a compact and interpretable representation of the recurring workforce pattern.
+- STL decomposition,
+- ACF and PACF,
+- Augmented Dickey-Fuller testing,
+- regular differencing,
+- seasonal differencing,
+- and analysis of additive versus multiplicative seasonal behavior.
 
-### LightGBM
+Key findings include:
 
-The machine-learning model uses temporal features including:
+- Raw-series ADF p-value: approximately **0.879**
+- Pre-break ADF p-value: approximately **0.870**
+- First-differenced series: stationary at the 5% level
+- Seasonal-differenced series: stationary at the 5% level
+- ACF at lag 7: approximately **0.953**
+- ACF at lag 14: approximately **0.937**
+
+The weekend-to-weekday mean ratio remains nearly constant across regimes:
+
+- Pre-break: approximately **0.452**
+- Post-break: approximately **0.450**
+
+while the absolute weekday-weekend gap increases from approximately **39** to **56** employees.
+
+This supports the use of **multiplicative weekly seasonality**.
+
+---
+
+## Classical Forecasting
+
+Two classical approaches are evaluated:
+
+- Exponential Smoothing
+- SARIMAX
+
+### Exponential Smoothing
+
+Several trend and seasonal specifications are compared using AIC and BIC.
+
+The AIC-selected specification is:
+
+- **Trend:** None
+- **Seasonality:** Multiplicative
+- **Seasonal period:** 7 days
+
+Its AIC is approximately:
+
+**2171.91**
+
+compared with approximately:
+
+**2269.03**
+
+for the original additive-trend/additive-seasonality benchmark.
+
+The selected model's Ljung-Box p-values at lags 7, 14, and 21 are approximately:
+
+- 0.252
+- 0.427
+- 0.111
+
+so the residual-autocorrelation null is not rejected at those tested lags.
+
+The final 60-day holdout is intentionally not used as the sole model-selection criterion. On that holdout:
+
+- Additive Holt-Winters WAPE: approximately **6.03%**
+- AIC-selected multiplicative ES WAPE: approximately **7.36%**
+
+This disagreement motivates the later repeated walk-forward evaluation.
+
+### SARIMAX
+
+Multiple SARIMAX orders are evaluated using AIC and BIC.
+
+The AIC-selected model is:
+
+`SARIMAX(2,1,2)(0,1,1,7)`
+
+Its final-holdout WAPE is approximately:
+
+**8.84%**
+
+Its Ljung-Box residual checks also show no significant autocorrelation at the tested weekly lags.
+
+---
+
+## Machine-Learning Forecasting
+
+A recursive LightGBM model is trained using leakage-safe temporal features.
+
+### Lag features
 
 - lag 1
 - lag 7
 - lag 14
 - lag 28
-- rolling means
-- rolling standard deviation
+
+### Rolling features
+
+- 7-day rolling mean
+- 7-day rolling standard deviation
+- 28-day rolling mean
+
+### Calendar features
+
 - day of week
 - month
-- annual sine/cosine calendar encoding
+- annual sine encoding
+- annual cosine encoding
 
-Multi-step forecasts are generated recursively.
+All rolling features use shifted target values so that the current target cannot enter its own predictors.
 
-Future actual observations are never used to construct forecast-time lag or rolling features.
+Multi-step forecasting is performed recursively. Future holdout targets are never used to build later lag or rolling features.
 
----
+### LightGBM Holdout Performance
 
-## Leakage Prevention
+On the final 60-day holdout:
 
-Avoiding temporal leakage is a central part of the project.
+- **MAE:** approximately 5.52
+- **RMSE:** approximately 6.59
+- **WAPE:** approximately 6.43%
+- **MASE:** approximately 1.15
 
-The following safeguards are applied:
+### Gain-Based Feature Importance
 
-- data is never randomly shuffled;
-- train/test splits preserve chronological order;
-- rolling statistics use `shift(1)` before rolling;
-- future test targets are never used as lag features;
-- LightGBM forecasts are generated recursively;
-- each backtest model is fitted only on the training data available for its own fold;
-- assertions verify that training windows do not overlap their test windows.
+The most influential features are:
 
-The documented structural-break date is used only for retrospective analysis and is not supplied to the forecasting models as a predictor.
+- **Day of week:** approximately 61.8% of total gain
+- **28-day rolling mean:** approximately 24.0%
+- **Lag 7:** approximately 6.0%
+
+This is consistent with the strong weekly pattern found during the diagnostic analysis.
 
 ---
 
 ## Walk-Forward Backtesting
 
-The main validation design uses:
+The project evaluates both:
 
-- **40 expanding-window folds**
+- **Expanding-window validation**
+- **Rolling-window validation**
+
+The main configuration uses:
+
+- **40 folds**
 - **10-day forecast horizon**
-- **minimum training history of 320 observations**
+- **320-day rolling training window**
+- **7-day seasonal-naive baseline**
 
-An expanding window was selected because it allows each model to accumulate all historical observations while making the effect of the April 2025 regime change visible.
+Both window designs evaluate exactly the same test periods.
 
-The wide set of folds ensures that the evaluation begins before the break rather than evaluating only the stable post-break period.
-
----
-
-## Key Results
-
-Across the 40 walk-forward folds, the approximate mean results were:
+### Expanding-Window Results
 
 | Model | MAE | RMSE | WAPE | MASE |
 |---|---:|---:|---:|---:|
-| Holt-Winters | 5.05 | 6.22 | 6.39% | 1.16 |
+| AIC-selected Exponential Smoothing | **4.47** | **5.67** | **5.64%** | **1.03** |
 | Recursive LightGBM | 5.33 | 6.72 | 6.68% | 1.22 |
 | Seasonal Naive | 5.68 | 7.37 | 7.13% | 1.30 |
 
-The most important finding is visible around the structural break.
+### Rolling-Window Results
 
-The fold crossing **2025-04-01** produces WAPE of approximately:
+| Model | MAE | RMSE | WAPE | MASE |
+|---|---:|---:|---:|---:|
+| AIC-selected Exponential Smoothing | **4.53** | **5.73** | **5.72%** | **0.95** |
+| Recursive LightGBM | 5.46 | 6.82 | 6.86% | 1.14 |
+| Seasonal Naive | 5.68 | 7.37 | 7.13% | 1.19 |
 
-- **17.4%** for Holt-Winters
-- **18.9%** for LightGBM
-- **17.1%** for seasonal naive
+The expanding window performs slightly better overall, so removing older observations does not improve average forecasting performance for this dataset.
 
-All model families therefore experience a major error increase when the new regime first appears.
+---
 
-Performance recovers once post-break observations begin entering the training windows.
+## Structural-Break Analysis
 
-This demonstrates why a single recent holdout can hide important failure modes.
+The fold crossing the documented structural break on **2025-04-01** produces a large temporary increase in forecast error.
+
+Expanding-window WAPE on the break fold:
+
+- AIC-selected Exponential Smoothing: **18.08%**
+- Recursive LightGBM: **18.92%**
+- Seasonal Naive: **17.11%**
+
+For the selected exponential-smoothing model, WAPE then falls to approximately:
+
+- **6.10%** on the following fold
+- **6.40%** on the next fold
+
+as post-break observations enter the training history.
+
+The result demonstrates that none of the tested models can anticipate an abrupt regime change before observing evidence of the new regime.
+
+---
+
+## Evaluation Metrics
+
+The project reports complementary point-forecast metrics:
+
+- **MAE**
+- **RMSE**
+- **WAPE**
+- **MASE**
+
+MAE and RMSE retain the original headcount scale.
+
+WAPE provides an aggregate percentage interpretation.
+
+MASE scales forecast error against an in-sample weekly seasonal-naive benchmark using a seasonal period of 7.
+
+Metrics are interpreted together rather than using any single value as the model-selection criterion.
 
 ---
 
 ## Probabilistic Forecasting
 
-Quantile LightGBM models were trained for the:
+Four uncertainty-aware approaches are evaluated on the same final 60-day holdout:
 
-- 10th percentile
-- 50th percentile
-- 90th percentile
+1. Quantile LightGBM
+2. Prophet native intervals
+3. sktime ThetaForecaster intervals
+4. Split-conformal intervals around the selected exponential-smoothing model
 
-The 10th and 90th percentiles form a nominal **80% prediction interval**.
+All approaches are evaluated using both:
 
-On the final 60-day holdout:
+- empirical coverage,
+- mean interval width.
 
-- **Empirical coverage:** approximately 81.7%
-- **Mean interval width:** approximately 17.6 headcount units
+Quantile LightGBM is additionally evaluated with pinball loss.
 
-Coverage and interval width are reported together because coverage alone does not indicate whether an interval is usefully sharp.
+### 80% Prediction-Interval Results
+
+| Method | Holdout WAPE | Empirical Coverage | Mean Interval Width |
+|---|---:|---:|---:|
+| Quantile LightGBM | 6.45% | **81.7%** | 17.57 |
+| sktime ThetaForecaster | 6.61% | **80.0%** | 17.71 |
+| Selected ES + Conformal | 7.36% | 60.0% | **13.54** |
+| Prophet | 8.24% | 63.3% | 16.65 |
+
+The Quantile LightGBM interval covers 49 of 60 holdout observations.
+
+Its observed 81.7% coverage has a 95% Wilson interval of approximately:
+
+**70.1% to 89.4%**
+
+so the result should not be interpreted as proof of perfect calibration.
+
+The conformal interval is calibrated using only historical walk-forward forecast errors that occur before the final holdout. The final holdout itself is not used to determine the conformal interval width.
 
 ---
 
-## Model Recommendation
+## Model-Family Comparison
 
-For this individual workforce series, the recommended primary point-forecast model is **Holt-Winters exponential smoothing**.
+The final decision considers more than forecast accuracy.
 
-The recommendation is based on more than forecast accuracy.
+### History Length
 
-### History
+The dataset contains 731 daily observations, providing enough history for both classical and tree-based forecasting.
 
-The dataset contains enough daily history for both classical and machine-learning models, but only one series is being forecast. Therefore, LightGBM does not gain the global-model advantage it would have across many related series.
+Because only one series is forecast, LightGBM does not gain the cross-series pooling advantage that it can offer in large multi-series forecasting problems.
 
 ### Interpretability
 
-Holt-Winters expresses the series using understandable level, trend, and weekly seasonal components, making the model easier to communicate to workforce-planning stakeholders.
+The selected exponential-smoothing model has a directly interpretable level and multiplicative weekly seasonal component.
 
-### Compute
+SARIMAX also provides explicit statistical structure and residual diagnostics.
 
-Holt-Winters is computationally lightweight and requires much less feature-engineering and recursive-inference infrastructure.
+Prophet provides interpretable trend and seasonal decomposition.
 
-### Prediction intervals
+LightGBM is less directly interpretable, although gain-based feature importance identifies the dominant predictors.
 
-Quantile LightGBM provides a useful uncertainty-aware extension and produced an 80% interval with empirical coverage close to the nominal target.
+### Prediction Intervals
 
-### Structural change
+Prophet and sktime provide native interval interfaces.
 
-Neither model family anticipated the unexpected April 2025 regime shift.
+LightGBM requires separate quantile models or an additional interval procedure.
 
-The primary operational control should therefore include frequent refitting, walk-forward monitoring, and investigation of sudden increases in forecast error.
+The project also demonstrates a split-conformal wrapper around the selected exponential-smoothing point model.
+
+### Compute and Operational Complexity
+
+The selected exponential-smoothing model is inexpensive to fit and does not require a feature-engineering or recursive-inference pipeline.
+
+LightGBM requires additional infrastructure for:
+
+- lag creation,
+- rolling features,
+- calendar features,
+- recursive inference,
+- leakage control,
+- and multiple quantile models.
+
+---
+
+## Deployment Recommendation
+
+For this single workforce-demand series, the recommended primary point-forecast model is the:
+
+**AIC-selected exponential-smoothing model with multiplicative weekly seasonality**
+
+The recommendation is based on the full validation evidence rather than on one holdout.
+
+Although LightGBM performs better on the final 60-day holdout, the repeated backtests favor exponential smoothing.
+
+The selected model achieves:
+
+- expanding-window WAPE of approximately **5.64%**
+- rolling-window WAPE of approximately **5.72%**
+
+compared with:
+
+- LightGBM expanding WAPE of approximately **6.68%**
+- LightGBM rolling WAPE of approximately **6.86%**
+
+The selected model also offers greater interpretability and lower implementation complexity for a single workforce series.
+
+The structural-break analysis shows that no tested model is inherently robust to an unexpected regime shift. A production deployment should therefore include:
+
+- frequent model refitting,
+- ongoing forecast-error monitoring,
+- repeated time-based validation,
+- and investigation of sudden error increases.
+
+For uncertainty-aware forecasting, sktime and Quantile LightGBM provide useful benchmarks, while the conformal and Prophet results demonstrate that nominal interval coverage does not guarantee calibrated holdout performance.
 
 ---
 
 ## Limitations
 
-- The dataset is synthetic and should not be interpreted as real company data.
-- No external explanatory variables are included.
-- A future regime change would not ordinarily be known in advance.
-- Holt-Winters residuals retain some autocorrelation according to the Ljung-Box diagnostic.
-- Prediction-interval calibration may deteriorate during a new structural break.
-- Conclusions apply to this series and validation design rather than establishing one universally superior forecasting family.
+- The dataset is synthetic and does not represent a real employer.
+- No external explanatory variables are available.
+- The date of a future regime change would not ordinarily be known in advance.
+- The initial additive exponential-smoothing model retained significant residual autocorrelation.
+- The selected multiplicative model passes the tested Ljung-Box checks, but this does not prove that every possible temporal dependency has been removed.
+- Prediction-interval coverage is evaluated on only 60 temporally related holdout observations.
+- SARIMAX, Prophet, and sktime were not all included in the full 40-fold model-family backtest, so their reported results should not be interpreted as repeated-validation rankings.
+- Interval calibration could change substantially after a future structural break.
+
+---
+
+## Leakage Prevention
+
+Temporal leakage is explicitly controlled throughout the project.
+
+The notebook:
+
+- never randomly shuffles the time series,
+- preserves chronological train/test order,
+- shifts the target before calculating rolling features,
+- never uses future holdout targets as lag features,
+- produces recursive LightGBM forecasts,
+- refits models separately inside each backtest fold,
+- and verifies that each training period ends before its test window begins.
+
+For rolling-window LightGBM evaluation, calendar features are rebuilt using the actual first date of each rolling training window.
+
+---
+
+## Reproducibility
+
+The notebook:
+
+- downloads the exact course dataset and shared utilities when required,
+- fixes the random seed using `RNG_SEED = 20260912`,
+- uses the course `common/backtest.py` implementation,
+- uses the course `common/metrics.py` implementation,
+- preserves chronological ordering,
+- and is designed to run sequentially in a fresh Google Colab runtime.
+
+No API key or credential is required.
 
 ---
 
 ## Repository Structure
 
 ```text
-.
+workforce-demand-time-series-forecasting/
 ├── README.md
 ├── workforce_demand_forecasting_capstone.ipynb
+└── .gitignore
 ```
 
-The course dataset and utility modules are downloaded automatically when the notebook is opened in a fresh Colab runtime.
+The dataset and course utility modules are retrieved automatically by the notebook.
 
 ---
 
@@ -263,35 +447,23 @@ The course dataset and utility modules are downloaded automatically when the not
 
 ### Google Colab
 
-Use the **Open in Colab** badge at the top of this README.
+Click the **Open in Colab** badge at the top of this README.
 
 Then select:
 
 `Runtime → Run all`
 
-The notebook installs its required open-source libraries and retrieves the dataset and shared course utility modules automatically.
+The notebook installs the required open-source packages and downloads the required course files automatically.
 
-No API key or credential is required.
+### Local Execution
 
-### Local execution
+Clone the repository and open:
 
-Clone this project repository and open the notebook in a Jupyter-compatible environment.
+`workforce_demand_forecasting_capstone.ipynb`
 
-Internet access is required on the first run if the course dataset and utilities are not already present locally.
+in a Jupyter-compatible environment.
 
----
-
-## Reproducibility
-
-The project fixes the random seed:
-
-```python
-RNG_SEED = 20260912
-```
-
-The notebook is designed to execute from top to bottom without manual data manipulation.
-
-Forecast metrics use the course-provided `common/metrics.py`, and the walk-forward split logic uses `common/backtest.py`.
+Internet access is required on the first run if the course data and utilities have not already been downloaded.
 
 ---
 
@@ -300,6 +472,8 @@ Forecast metrics use the course-provided `common/metrics.py`, and the walk-forwa
 This project was completed under:
 
 **SDAIA Academy — Time Series Forecasting AI Systems**
+
+**Cohort:** 20/9/2026 – 22/9/2026
 
 SDAIA Academy GitHub:
 
@@ -314,5 +488,3 @@ https://github.com/MohammadYusif/time-series-forecasting-ai-systems
 ## Author
 
 **Norah Almadhi**
-
-
