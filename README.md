@@ -435,8 +435,7 @@ No API key or credential is required.
 ```text
 workforce-demand-time-series-forecasting/
 ├── README.md
-├── workforce_demand_forecasting_capstone.ipynb
-└── .gitignore
+├── Workforce_Demand_Forecasting.ipynb
 ```
 
 The dataset and course utility modules are retrieved automatically by the notebook.
